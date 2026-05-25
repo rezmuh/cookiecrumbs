@@ -1,0 +1,271 @@
+openapi: 3.0.0
+info:
+  title: Cookiecrumbs API
+  description: Polyglot Sentry demo API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8001
+    description: Django service
+  - url: http://localhost:8002
+    description: Java service
+  - url: http://localhost:8003
+    description: Rust service
+  - url: http://localhost:8004
+    description: Go service
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: python-django
+                  version:
+                    type: string
+                    example: 1.0.0
+                  dependencies:
+                    type: object
+                    properties:
+                      postgres:
+                        type: string
+                        example: connected
+                      redis:
+                        type: string
+                        example: connected
+
+  /demo/log:
+    post:
+      summary: Emit structured log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - level
+                - message
+              properties:
+                level:
+                  type: string
+                  enum: [debug, info, warning, error]
+                message:
+                  type: string
+                context:
+                  type: object
+      responses:
+        '200':
+          description: Log emitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: logged
+
+  /demo/error/handled:
+    post:
+      summary: Capture handled exception
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Something went wrong but we handled it"
+      responses:
+        '200':
+          description: Handled error captured
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: error_handled
+                  message:
+                    type: string
+
+  /demo/error/unhandled:
+    post:
+      summary: Trigger unhandled exception
+      responses:
+        '500':
+          description: Unhandled error triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Internal server error
+
+  /demo/trace/db:
+    get:
+      summary: Postgres query trace
+      responses:
+        '200':
+          description: DB trace completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: db_trace_complete
+                  count:
+                    type: integer
+
+  /demo/trace/redis:
+    get:
+      summary: Redis operation trace
+      responses:
+        '200':
+          description: Redis trace completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: redis_trace_complete
+                  value:
+                    type: string
+
+  /demo/trace/full:
+    post:
+      summary: Combined trace (log + DB + Redis + nested spans)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Full trace test"
+      responses:
+        '200':
+          description: Full trace completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: full_trace_complete
+                  operations:
+                    type: array
+                    items:
+                      type: string
+
+  /demo/metric:
+    post:
+      summary: Emit custom metric
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - value
+              properties:
+                name:
+                  type: string
+                  example: demo.counter
+                value:
+                  type: number
+                tags:
+                  type: object
+      responses:
+        '200':
+          description: Metric emitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: metric_emitted
+
+  /demo/db/items:
+    get:
+      summary: Read shared table rows
+      responses:
+        '200':
+          description: List of items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        service_name:
+                          type: string
+                        message:
+                          type: string
+                        created_at:
+                          type: string
+                          format: date-time
+    post:
+      summary: Insert row into shared table
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+      responses:
+        '201':
+          description: Item created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  service_name:
+                    type: string
+                  message:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time

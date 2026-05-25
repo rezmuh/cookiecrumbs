@@ -1,0 +1,203 @@
+{
+  "info": {
+    "name": "Cookiecrumbs - Sentry Demo",
+    "description": "Polyglot Sentry demo API collection. Set {{baseUrl}} to the service you want to test (e.g., http://localhost:8001 for Django).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Log - Info",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"level\": \"info\",\n  \"message\": \"Test info log message\",\n  \"context\": {\n    \"user_id\": \"12345\",\n    \"action\": \"test\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demo/log",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "log"]
+        }
+      }
+    },
+    {
+      "name": "Log - Error",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"level\": \"error\",\n  \"message\": \"Test error log message\",\n  \"context\": {\n    \"error_code\": \"E001\",\n    \"severity\": \"high\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demo/log",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "log"]
+        }
+      }
+    },
+    {
+      "name": "Error - Handled",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Something went wrong but we handled it\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demo/error/handled",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "error", "handled"]
+        }
+      }
+    },
+    {
+      "name": "Error - Unhandled",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/demo/error/unhandled",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "error", "unhandled"]
+        }
+      }
+    },
+    {
+      "name": "Trace - DB",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/demo/trace/db",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "trace", "db"]
+        }
+      }
+    },
+    {
+      "name": "Trace - Redis",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/demo/trace/redis",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "trace", "redis"]
+        }
+      }
+    },
+    {
+      "name": "Trace - Full",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Full trace test with log, DB, and Redis operations\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demo/trace/full",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "trace", "full"]
+        }
+      }
+    },
+    {
+      "name": "Metric",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"demo.counter\",\n  \"value\": 1,\n  \"tags\": {\n    \"environment\": \"local\",\n    \"feature\": \"test\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demo/metric",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "metric"]
+        }
+      }
+    },
+    {
+      "name": "DB Items - List",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/demo/db/items",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "db", "items"]
+        }
+      }
+    },
+    {
+      "name": "DB Items - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Test item created from Postman\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demo/db/items",
+          "host": ["{{baseUrl}}"],
+          "path": ["demo", "db", "items"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8001",
+      "type": "string",
+      "description": "Base URL for the service to test. Change port to test different services: 8001 (Django), 8002 (Java), 8003 (Rust), 8004 (Go)"
+    }
+  ]
+}

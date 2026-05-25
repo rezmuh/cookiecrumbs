@@ -1,0 +1,5 @@
+Django==5.0.1
+psycopg2-binary
+redis==5.0.1
+sentry-sdk[django]==2.44.0
+python-dotenv==1.0.0
