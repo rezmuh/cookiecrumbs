@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::net::SocketAddr;
 use tokio_postgres::NoTls;
-use tracing::{error, info, warn};
+use tracing::{error, info, info_span, warn, Instrument};
 use tracing_subscriber::prelude::*;
 
 const SERVICE_NAME: &str = "rust-axum";
@@ -270,8 +270,12 @@ async fn demo_error_unhandled() -> Result<Json<serde_json::Value>, AppError> {
 
 async fn demo_trace_db(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
     info!(metric_name="api.request", endpoint="demo/trace/db", service=SERVICE_NAME, method="GET", "api.request");
+    let span = info_span!("db", "db.statement" = "SELECT COUNT(*) FROM demo_items");
     let client = state.db_pool.get().await?;
-    let row = client.query_one("SELECT COUNT(*) FROM demo_items", &[]).await?;
+    let row = client
+        .query_one("SELECT COUNT(*) FROM demo_items", &[])
+        .instrument(span)
+        .await?;
     let count: i64 = row.get(0);
 
     Ok(Json(TraceDbResponse {
@@ -285,8 +289,14 @@ async fn demo_trace_redis(State(state): State<AppState>) -> Result<impl IntoResp
     let key = format!("demo:{}:counter", SERVICE_NAME);
     let mut redis = state.redis.clone();
     
-    redis.incr::<_, _, i64>(&key, 1).await?;
-    let value: String = redis.get(&key).await?;
+    let span = info_span!("cache", "cache.key" = %key, "cache.operation" = "INCR/GET");
+    let value: String = async {
+        redis.incr::<_, _, i64>(&key, 1).await?;
+        let val: String = redis.get(&key).await?;
+        Ok::<_, redis::RedisError>(val)
+    }
+    .instrument(span)
+    .await?;
 
     Ok(Json(TraceRedisResponse {
         status: "redis_trace_complete".into(),
@@ -301,23 +311,37 @@ async fn demo_trace_full(
     info!(metric_name="api.request", endpoint="demo/trace/full", service=SERVICE_NAME, method="POST", "api.request");
     let message = body.message.unwrap_or_else(|| "Full trace test".into());
 
-    info!("Starting full trace: {}", message);
+    // Log operation
+    let log_span = info_span!("log", "log.message" = %message);
+    async {
+        info!("Starting full trace: {}", message);
+    }
+    .instrument(log_span)
+    .await;
 
     // DB operation
+    let db_span = info_span!("db", "db.statement" = "INSERT INTO demo_items (service_name, message) VALUES ($1, $2) RETURNING id");
     let client = state.db_pool.get().await?;
     let row = client
         .query_one(
             "INSERT INTO demo_items (service_name, message) VALUES ($1, $2) RETURNING id",
             &[&SERVICE_NAME, &message],
         )
+        .instrument(db_span)
         .await?;
     let item_id: i32 = row.get(0);
 
     // Redis operations
+    let redis_span = info_span!("cache", "cache.operation" = "SET/INCR");
     let mut redis = state.redis.clone();
-    redis.set::<_, _, ()>(format!("demo:{}:last-log", SERVICE_NAME), &message).await?;
-    redis.incr::<_, _, ()>(format!("demo:{}:counter", SERVICE_NAME), 1).await?;
-    redis.set::<_, _, ()>("demo:shared:heartbeat", SERVICE_NAME).await?;
+    async {
+        redis.set::<_, _, ()>(format!("demo:{}:last-log", SERVICE_NAME), &message).await?;
+        redis.incr::<_, _, ()>(format!("demo:{}:counter", SERVICE_NAME), 1).await?;
+        redis.set::<_, _, ()>("demo:shared:heartbeat", SERVICE_NAME).await?;
+        Ok::<_, redis::RedisError>(())
+    }
+    .instrument(redis_span)
+    .await?;
 
     Ok(Json(TraceFullResponse {
         status: "full_trace_complete".into(),
@@ -354,12 +378,14 @@ async fn demo_metric(Json(body): Json<MetricRequest>) -> impl IntoResponse {
 
 async fn get_items(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
     info!(metric_name="api.request", endpoint="demo/db/items", service=SERVICE_NAME, method="GET", "api.request");
+    let span = info_span!("db", "db.statement" = "SELECT id, service_name, message, created_at FROM demo_items ORDER BY created_at DESC LIMIT 100");
     let client = state.db_pool.get().await?;
     let rows = client
         .query(
             "SELECT id, service_name, message, created_at FROM demo_items ORDER BY created_at DESC LIMIT 100",
             &[],
         )
+        .instrument(span)
         .await?;
 
     let items: Vec<ItemResponse> = rows
@@ -380,12 +406,14 @@ async fn create_item(
     Json(body): Json<CreateItemRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     info!(metric_name="api.request", endpoint="demo/db/items", service=SERVICE_NAME, method="POST", "api.request");
+    let span = info_span!("db", "db.statement" = "INSERT INTO demo_items (service_name, message) VALUES ($1, $2) RETURNING id, service_name, message, created_at");
     let client = state.db_pool.get().await?;
     let row = client
         .query_one(
             "INSERT INTO demo_items (service_name, message) VALUES ($1, $2) RETURNING id, service_name, message, created_at",
             &[&SERVICE_NAME, &body.message],
         )
+        .instrument(span)
         .await?;
 
     let item = ItemResponse {
