@@ -121,3 +121,13 @@ run-go:
     source .env
     set +a
     go run .
+
+run-node:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd apps/node-express
+    set -a
+    source ../../.env
+    source .env
+    set +a
+    npx tsx --import ./src/instrument.ts src/index.ts
