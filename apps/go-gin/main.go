@@ -245,6 +245,10 @@ func demoTraceDbHandler(c *gin.Context) {
 	logger := sentry.NewLogger(c.Request.Context())
 	logger.Info().Emit("Starting DB trace")
 
+	span := sentry.StartSpan(c.Request.Context(), "db", sentry.WithTransactionName("SELECT COUNT(*) FROM demo_items"))
+	span.SetData("db.statement", "SELECT COUNT(*) FROM demo_items")
+	defer span.Finish()
+
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM demo_items").Scan(&count)
 	if err != nil {
@@ -264,8 +268,13 @@ func demoTraceRedisHandler(c *gin.Context) {
 	logger := sentry.NewLogger(c.Request.Context())
 	logger.Info().Emit("Starting Redis trace")
 
+	span := sentry.StartSpan(c.Request.Context(), "cache", sentry.WithTransactionName("redis INCR/GET"))
+	span.SetData("cache.key", fmt.Sprintf("demo:%s:counter", serviceName))
+	span.SetData("cache.operation", "INCR/GET")
+	defer span.Finish()
+
 	key := fmt.Sprintf("demo:%s:counter", serviceName)
-	ctx := c.Request.Context()
+	ctx := span.Context()
 
 	err := redisClient.Incr(ctx, key).Err()
 	if err != nil {
@@ -303,24 +312,34 @@ func demoTraceFullHandler(c *gin.Context) {
 		message = "Full trace test"
 	}
 
+	// Log operation
+	logSpan := sentry.StartSpan(c.Request.Context(), "log", sentry.WithTransactionName("emit structured log"))
+	logSpan.SetData("log.message", message)
 	logger.Info().String("message", message).Emit("Processing full trace")
+	logSpan.Finish()
 
 	// DB operation
+	dbSpan := sentry.StartSpan(c.Request.Context(), "db", sentry.WithTransactionName("INSERT INTO demo_items"))
+	dbSpan.SetData("db.statement", "INSERT INTO demo_items (service_name, message) VALUES ($1, $2) RETURNING id")
 	var itemID int
 	err := db.QueryRow(
 		"INSERT INTO demo_items (service_name, message) VALUES ($1, $2) RETURNING id",
 		serviceName, message,
 	).Scan(&itemID)
+	dbSpan.Finish()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Redis operations
-	ctx := c.Request.Context()
+	redisSpan := sentry.StartSpan(c.Request.Context(), "cache", sentry.WithTransactionName("redis SET/INCR"))
+	redisSpan.SetData("cache.operation", "SET/INCR")
+	ctx := redisSpan.Context()
 	redisClient.Set(ctx, fmt.Sprintf("demo:%s:last-log", serviceName), message, 0)
 	redisClient.Incr(ctx, fmt.Sprintf("demo:%s:counter", serviceName))
 	redisClient.Set(ctx, "demo:shared:heartbeat", serviceName, 0)
+	redisSpan.Finish()
 
 	logger.Info().Int("item_id", itemID).Emit("Full trace complete")
 	c.JSON(http.StatusOK, TraceFullResponse{
@@ -353,6 +372,10 @@ func demoMetricHandler(c *gin.Context) {
 
 func getItemsHandler(c *gin.Context) {
 	sentry.CaptureMessage("api.request:demo/db/items")
+	span := sentry.StartSpan(c.Request.Context(), "db", sentry.WithTransactionName("SELECT items"))
+	span.SetData("db.statement", "SELECT id, service_name, message, created_at FROM demo_items ORDER BY created_at DESC LIMIT 100")
+	defer span.Finish()
+
 	rows, err := db.Query("SELECT id, service_name, message, created_at FROM demo_items ORDER BY created_at DESC LIMIT 100")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -385,6 +408,10 @@ func createItemHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	span := sentry.StartSpan(c.Request.Context(), "db", sentry.WithTransactionName("INSERT item"))
+	span.SetData("db.statement", "INSERT INTO demo_items (service_name, message) VALUES ($1, $2) RETURNING id, service_name, message, created_at")
+	defer span.Finish()
 
 	var item ItemResponse
 	var createdAt sql.NullTime
