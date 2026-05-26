@@ -7,8 +7,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import io.sentry.ISpan;
 import io.sentry.Sentry;
 import io.sentry.SentryLevel;
+import io.sentry.SpanStatus;
 import io.sentry.metrics.SentryMetricsParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,7 +115,19 @@ public class DemoController {
     @GetMapping("/demo/trace/db")
     public ResponseEntity<Map<String, Object>> demoTraceDb() {
         Sentry.metrics().count("api.request", 1.0);
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM demo_items", Integer.class);
+        ISpan parentSpan = Sentry.getSpan();
+        ISpan dbSpan = null;
+        if (parentSpan != null) {
+            dbSpan = parentSpan.startChild("db", "SELECT COUNT(*) FROM demo_items");
+        }
+        Integer count;
+        try {
+            count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM demo_items", Integer.class);
+        } finally {
+            if (dbSpan != null) {
+                dbSpan.finish();
+            }
+        }
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "db_trace_complete");
@@ -124,9 +138,21 @@ public class DemoController {
     @GetMapping("/demo/trace/redis")
     public ResponseEntity<Map<String, String>> demoTraceRedis() {
         Sentry.metrics().count("api.request", 1.0);
+        ISpan parentSpan = Sentry.getSpan();
+        ISpan redisSpan = null;
+        if (parentSpan != null) {
+            redisSpan = parentSpan.startChild("cache", "redis INCR/GET");
+        }
         String key = String.format("demo:%s:counter", SERVICE_NAME);
-        redisTemplate.opsForValue().increment(key);
-        String value = redisTemplate.opsForValue().get(key);
+        String value;
+        try {
+            redisTemplate.opsForValue().increment(key);
+            value = redisTemplate.opsForValue().get(key);
+        } finally {
+            if (redisSpan != null) {
+                redisSpan.finish();
+            }
+        }
 
         Map<String, String> response = new HashMap<>();
         response.put("status", "redis_trace_complete");
@@ -139,19 +165,53 @@ public class DemoController {
         Sentry.metrics().count("api.request", 1.0);
         String message = (String) body.getOrDefault("message", "Full trace test");
 
-        logger.info("Starting full trace: {}", message);
+        ISpan parentSpan = Sentry.getSpan();
+
+        // Log operation
+        ISpan logSpan = null;
+        if (parentSpan != null) {
+            logSpan = parentSpan.startChild("log", "emit structured log");
+        }
+        try {
+            logger.info("Starting full trace: {}", message);
+        } finally {
+            if (logSpan != null) {
+                logSpan.finish();
+            }
+        }
 
         // DB operation
-        Integer itemId = jdbcTemplate.queryForObject(
-            "INSERT INTO demo_items (service_name, message) VALUES (?, ?) RETURNING id",
-            Integer.class,
-            SERVICE_NAME, message
-        );
+        ISpan dbSpan = null;
+        Integer itemId;
+        if (parentSpan != null) {
+            dbSpan = parentSpan.startChild("db", "INSERT INTO demo_items");
+        }
+        try {
+            itemId = jdbcTemplate.queryForObject(
+                "INSERT INTO demo_items (service_name, message) VALUES (?, ?) RETURNING id",
+                Integer.class,
+                SERVICE_NAME, message
+            );
+        } finally {
+            if (dbSpan != null) {
+                dbSpan.finish();
+            }
+        }
 
         // Redis operations
-        redisTemplate.opsForValue().set(String.format("demo:%s:last-log", SERVICE_NAME), message);
-        redisTemplate.opsForValue().increment(String.format("demo:%s:counter", SERVICE_NAME));
-        redisTemplate.opsForValue().set("demo:shared:heartbeat", SERVICE_NAME);
+        ISpan redisSpan = null;
+        if (parentSpan != null) {
+            redisSpan = parentSpan.startChild("cache", "redis SET/INCR");
+        }
+        try {
+            redisTemplate.opsForValue().set(String.format("demo:%s:last-log", SERVICE_NAME), message);
+            redisTemplate.opsForValue().increment(String.format("demo:%s:counter", SERVICE_NAME));
+            redisTemplate.opsForValue().set("demo:shared:heartbeat", SERVICE_NAME);
+        } finally {
+            if (redisSpan != null) {
+                redisSpan.finish();
+            }
+        }
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "full_trace_complete");

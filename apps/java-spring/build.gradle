@@ -25,6 +25,7 @@ dependencies {
     implementation 'io.sentry:sentry-spring-boot-starter-jakarta:8.34.0'
     implementation 'io.sentry:sentry-logback:8.34.0'
     implementation 'io.sentry:sentry-jdbc:8.34.0'
+    implementation 'p6spy:p6spy:3.9.1'
     
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

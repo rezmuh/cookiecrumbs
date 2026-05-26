@@ -91,3 +91,6 @@ logs/
 *.bak
 *.tmp
 *.temp
+
+# LLM settings
+opencode.json
